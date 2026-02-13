@@ -18,9 +18,8 @@ export const register = async (req, res) => {
     const db = await getDB();
 
     // Check if user already exists
-    const existingUser = await db.get(
-      'SELECT id FROM users WHERE username = ? OR email = ?',
-      [username, email]
+    const existingUser = db.data.users.find(u => 
+      u.username === username || u.email === email
     );
 
     if (existingUser) {
@@ -32,18 +31,24 @@ export const register = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, saltRounds);
 
     // Create user
-    const result = await db.run(
-      'INSERT INTO users (username, email, password) VALUES (?, ?, ?)',
-      [username, email, hashedPassword]
-    );
+    const newUser = {
+      id: db.data.nextUserId++,
+      username,
+      email,
+      password: hashedPassword,
+      createdAt: new Date().toISOString()
+    };
+    
+    db.data.users.push(newUser);
+    await db.write();
 
     // Generate token
-    const token = generateToken(result.lastID);
+    const token = generateToken(newUser.id);
 
     res.status(201).json({
       message: 'User created successfully',
       user: {
-        id: result.lastID,
+        id: newUser.id,
         username,
         email
       },
@@ -65,9 +70,8 @@ export const login = async (req, res) => {
     }
 
     const db = await getDB();
-    const user = await db.get(
-      'SELECT id, username, email, password FROM users WHERE username = ? OR email = ?',
-      [username, username]
+    const user = db.data.users.find(u => 
+      u.username === username || u.email === username
     );
 
     if (!user) {
